@@ -23,8 +23,10 @@ leave an already-written trampoline targeting unloaded code.
 
 - Migrated the CommonLib submodule from the release's format-2-only fork to the
   audited CommonLibSSE-NG 7.1.0 maintenance commit.
-- Restricted the generated SKSE compatibility metadata and runtime checks to
-  1.7.104.0.
+- Restricted both the generated SKSE compatibility metadata and runtime checks
+  to 1.7.104.0. The declaration keeps the extended Address Library format-5
+  marker but deliberately leaves the legacy version-independence flags clear;
+  otherwise SKSE bypasses the compatible-version list.
 - Migrated removed CommonLib APIs:
   - `TESDataHandler::merchantInventory` -> `GetMerchantInventory()`
   - `BarterMenu::root` -> `GetRuntimeData().root`

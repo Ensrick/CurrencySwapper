@@ -83,6 +83,29 @@ jobs:
             }
           }
 
+          $handle = [Runtime.InteropServices.NativeLibrary]::Load((Resolve-Path -LiteralPath $dll).Path)
+          try {
+            $metadata = [Runtime.InteropServices.NativeLibrary]::GetExport($handle, 'SKSEPlugin_Version')
+            $readUInt32 = {
+              param([int] $offset)
+              [uint32] [Runtime.InteropServices.Marshal]::ReadInt32($metadata, $offset)
+            }
+
+            if ((& $readUInt32 0x000) -ne 1) {
+              throw 'Unexpected SKSE plugin declaration version.'
+            }
+            if ((& $readUInt32 0x304) -ne 2) {
+              throw 'The DLL does not advertise Address Library format-5 support.'
+            }
+            if ((& $readUInt32 0x308) -ne 0 -or
+                (& $readUInt32 0x30C) -ne 0x01070680 -or
+                (& $readUInt32 0x310) -ne 0) {
+              throw 'The DLL metadata is not restricted to Skyrim 1.7.104.0.'
+            }
+          } finally {
+            [Runtime.InteropServices.NativeLibrary]::Free($handle)
+          }
+
           $pluginDirectory = 'out\SKSE\Plugins'
           New-Item -ItemType Directory -Path $pluginDirectory -Force | Out-Null
           Copy-Item -LiteralPath $dll -Destination $pluginDirectory -Force

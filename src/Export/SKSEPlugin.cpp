@@ -12,8 +12,10 @@ extern "C" DLLEXPORT constinit auto SKSEPlugin_Version = []()
 		v.PluginVersion(Plugin::VERSION);
 		v.PluginName(Plugin::NAME);
 		v.AuthorName("SeaSparrow"sv);
-		v.UsesAddressLibrary();
-		v.UsesUpdatedStructs();
+		// Keep SKSE's legacy version-independence flags clear so the loader
+		// actually evaluates the exact compatible-version list below. The
+		// default versionIndependenceEx value still advertises Address Library
+		// format-5 support to current SKSE builds.
 		v.CompatibleVersions({ SKSE::RUNTIME_SSE_1_7_104 });
 
 		return v;
