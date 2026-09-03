@@ -3,22 +3,24 @@
   "version-string": "2.2.0",
   "description": "Allows for the manipulation of the game's default currency through scripts.",
   "homepage": "https://github.com/SeaSparrowOG/CurrencySwapper",
-  "license": "MIT",
+  "license": "Apache-2.0",
   "dependencies": [
     "boost-stl-interfaces",
     "clib-util",
+    "directxtk",
     "fmt",
     "jsoncpp",
+    "rapidcsv",
     "rsm-binary-io",
     "simpleini",
     "spdlog",
     "xbyak"
   ],
-  "builtin-baseline": "89dd0f4d241136b843fb55813b2f0fa6448c204d",
+  "builtin-baseline": "ee12231b20c95013c6638d845d04c91559a1d1ff",
   "overrides": [
     {
       "name": "xbyak",
-      "version": "7.23.1"
+      "version": "7.28"
     }
   ]
 }

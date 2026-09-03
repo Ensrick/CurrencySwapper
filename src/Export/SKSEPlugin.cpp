@@ -14,6 +14,7 @@ extern "C" DLLEXPORT constinit auto SKSEPlugin_Version = []()
 		v.AuthorName("SeaSparrow"sv);
 		v.UsesAddressLibrary();
 		v.UsesUpdatedStructs();
+		v.CompatibleVersions({ SKSE::RUNTIME_SSE_1_7_104 });
 
 		return v;
 	}();
@@ -51,7 +52,7 @@ extern "C" DLLEXPORT bool SKSEAPI SKSEPlugin_Query(const SKSE::QueryInterface* a
 
 	const auto ver = a_skse->RuntimeVersion();
 #ifdef SKYRIM_AE
-	if (ver < SKSE::RUNTIME_SSE_1_6_1130) {
+	if (ver != SKSE::RUNTIME_SSE_1_7_104) {
 #else
 	if (ver < SKSE::RUNTIME_1_5_39) {
 #endif
@@ -77,7 +78,8 @@ extern "C" DLLEXPORT bool SKSEAPI SKSEPlugin_Load(const SKSE::LoadInterface * a_
 
 #ifdef SKYRIM_AE
 	const auto ver = a_skse->RuntimeVersion();
-	if (ver < SKSE::RUNTIME_SSE_1_6_1130) {
+	if (ver != SKSE::RUNTIME_SSE_1_7_104) {
+		logger::critical(FMT_STRING("Unsupported runtime version {}; this build requires 1.7.104.0"), ver.string());
 		return false;
 	}
 #endif
@@ -85,13 +87,17 @@ extern "C" DLLEXPORT bool SKSEAPI SKSEPlugin_Load(const SKSE::LoadInterface * a_
 	logger::info("Performing startup tasks..."sv);
 
 	if (!Settings::INI::Read()) {
-		SKSE::stl::report_and_fail("Failed to load INI settings. Check the log for details."sv);
+		logger::critical("Failed to load INI settings. Currency Swapper will not be loaded."sv);
+		return false;
 	}
 	if (!Hooks::Install()) {
+		// One or more hooks may already point into this DLL. Failing the load and
+		// allowing it to unload would leave dangling trampoline targets, so fail
+		// closed through CommonLib's log-only, non-modal fatal path.
 		SKSE::stl::report_and_fail("Failed to install hooks. Check the log for more information."sv);
 	}
 	if (!CurrencyManager::Initialize()) {
-		SKSE::stl::report_and_fail("Failed to install Currency Manager. Check the log for details."sv);
+		SKSE::stl::report_and_fail("Failed to initialize Currency Manager after hooks were installed. Check the log for details."sv);
 	}
 	SKSE::GetPapyrusInterface()->Register(Papyrus::RegisterFunctions);
 

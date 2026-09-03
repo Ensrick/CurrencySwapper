@@ -602,13 +602,13 @@ namespace CurrencyManager
 		}
 		var.SetText(vendorInfo.c_str());
 
-		auto& merchantEntries = *RE::TESDataHandler::GetSingleton()->merchantInventory->entryList;
 		uint32_t merchantGold = 0;
-		for (auto* entry : merchantEntries) {
-			//Yoda
-			if (entry->object == customCurrency) {
-				merchantGold = entry->countDelta;
-				break;
+		if (const auto* merchantInventory = dh->GetMerchantInventory(); merchantInventory && merchantInventory->entryList) {
+			for (auto* entry : *merchantInventory->entryList) {
+				if (entry && entry->object == customCurrency) {
+					merchantGold = entry->countDelta;
+					break;
+				}
 			}
 		}
 
@@ -731,7 +731,7 @@ namespace CurrencyManager
 			return;
 		}
 
-		auto& root = barterMenu->root;
+		auto& root = barterMenu->GetRuntimeData().root;
 		if (root.IsUndefined() || root.IsNull()) {
 			LOG_DEBUG("  >UpdateSkyUIText: Failed to get root."sv);
 			return;
@@ -918,7 +918,8 @@ namespace CurrencyManager
 			return;
 		}
 
-		auto& trainingMenuObj = a_menu->trainingMenuObj;
+		auto& runtimeData = a_menu->GetRuntimeData();
+		auto& trainingMenuObj = runtimeData.trainingMenuObj;
 		if (trainingMenuObj.IsUndefined() || trainingMenuObj.IsNull()) {
 			return;
 		}
@@ -949,13 +950,13 @@ namespace CurrencyManager
 			return;
 		}
 
-		auto* trainingActor = a_menu->trainer;
+		auto* trainingActor = runtimeData.trainer;
 		if (!trainingActor) {
 			return;
 		}
 		trainerActorID = trainingActor->formID;
 
-		auto& currentGold = a_menu->currentGold;
+		auto& currentGold = runtimeData.currentGold;
 		const auto currencyCount = RE::PlayerCharacter::GetSingleton()->GetItemCount(customCurrency);
 		const auto currencyCountStr = std::to_string(currencyCount);
 		currentGold.SetText(currencyCountStr.c_str());
@@ -1005,25 +1006,25 @@ namespace CurrencyManager
 		}
 		LOG_DEBUG("  >Requesting training cost for skill level: {}"sv, a_SkillLevel);
 		LOG_DEBUG("    >Journeyman Cost: {}, Journeyman Skill: {}"sv,
-			journeymanCost->GetSInt(), journeymanSkill->GetSInt());
+			journeymanCost->GetInteger(), journeymanSkill->GetInteger());
 		LOG_DEBUG("    >Expert Cost: {}, Expert Skill: {}"sv,
-			expertCost->GetSInt(), expertSkill->GetSInt());
+			expertCost->GetInteger(), expertSkill->GetInteger());
 		LOG_DEBUG("    >Master Cost: {}, Master Skill: {}"sv,
-			masterCost->GetSInt(), masterSkill->GetSInt());
+			masterCost->GetInteger(), masterSkill->GetInteger());
 
 		float base = 0.0f;
 		if (overrideTrainingCostBase) {
 			base = trainingCostBaseOverride;
 		}
 		else {
-			if (a_SkillLevel < journeymanSkill->GetSInt()) {
-				base = static_cast<float>(journeymanCost->GetSInt());
+			if (a_SkillLevel < journeymanSkill->GetInteger()) {
+				base = static_cast<float>(journeymanCost->GetInteger());
 			}
-			else if (a_SkillLevel < expertSkill->GetSInt()) {
-				base = static_cast<float>(expertCost->GetSInt());
+			else if (a_SkillLevel < expertSkill->GetInteger()) {
+				base = static_cast<float>(expertCost->GetInteger());
 			}
 			else {
-				base = static_cast<float>(masterCost->GetSInt());
+				base = static_cast<float>(masterCost->GetInteger());
 			}
 		}
 
