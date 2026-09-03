@@ -1,0 +1,154 @@
+name: Skyrim 1.7.104 Port CI
+
+on:
+  push:
+    branches:
+      - port/1.7.104-no-modal
+  pull_request:
+    branches:
+      - release/2.2.0
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: currency-swapper-1-7-104-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  BUILD_CONFIGURATION: Release
+  VCPKG_DEFAULT_BINARY_CACHE: ${{ github.workspace }}\vcpkg-cache
+
+jobs:
+  build:
+    name: Build and inspect DLL
+    runs-on: windows-2022
+
+    steps:
+      - name: Check out pinned source and submodules
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          submodules: recursive
+
+      - name: Set up MSVC
+        uses: ilammy/msvc-dev-cmd@v1
+
+      - name: Prepare vcpkg
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $vcpkgRoot = 'C:\vcpkg'
+          if (-not (Test-Path -LiteralPath "$vcpkgRoot\vcpkg.exe" -PathType Leaf)) {
+            throw "GitHub runner vcpkg was not found at $vcpkgRoot"
+          }
+          "VCPKG_ROOT=$vcpkgRoot" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
+          New-Item -ItemType Directory -Path $env:VCPKG_DEFAULT_BINARY_CACHE -Force | Out-Null
+          & "$vcpkgRoot\vcpkg.exe" version
+
+      - name: Cache vcpkg binaries
+        uses: actions/cache@v4
+        with:
+          path: ${{ env.VCPKG_DEFAULT_BINARY_CACHE }}
+          key: ${{ runner.os }}-currency-swapper-1-7-104-${{ hashFiles('vcpkg.json', 'cmake/ports/**', '.gitmodules') }}
+
+      - name: Configure
+        shell: pwsh
+        run: cmake --preset vs2022-windows-vcpkg-release -Wno-deprecated
+
+      - name: Build
+        shell: pwsh
+        run: cmake --build build --config $env:BUILD_CONFIGURATION --target CurrencySwapper --parallel
+
+      - name: Validate and stage DLL overlay
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $dll = 'build\Release\CurrencySwapper.dll'
+          $pdb = 'build\Release\CurrencySwapper.pdb'
+          if (-not (Test-Path -LiteralPath $dll -PathType Leaf)) {
+            throw 'CurrencySwapper.dll was not produced.'
+          }
+
+          $version = (Get-Item -LiteralPath $dll).VersionInfo.FileVersion
+          if ([version] $version -ne [version] '2.2.0.0') {
+            throw "Unexpected DLL file version: $version"
+          }
+
+          $exports = & dumpbin.exe /nologo /exports $dll | Out-String
+          foreach ($requiredExport in 'SKSEPlugin_Load', 'SKSEPlugin_Query', 'SKSEPlugin_Version') {
+            if ($exports -notmatch [regex]::Escape($requiredExport)) {
+              throw "Missing DLL export: $requiredExport"
+            }
+          }
+
+          Add-Type -TypeDefinition @'
+          using System;
+          using System.Runtime.InteropServices;
+
+          public static class NativeMethods
+          {
+              [DllImport("kernel32.dll", CharSet = CharSet.Unicode, SetLastError = true)]
+              public static extern IntPtr LoadLibraryEx(string fileName, IntPtr file, uint flags);
+
+              [DllImport("kernel32.dll", CharSet = CharSet.Ansi, ExactSpelling = true, SetLastError = true)]
+              public static extern IntPtr GetProcAddress(IntPtr module, string procName);
+
+              [DllImport("kernel32.dll", SetLastError = true)]
+              [return: MarshalAs(UnmanagedType.Bool)]
+              public static extern bool FreeLibrary(IntPtr module);
+          }
+          '@
+
+          # Map the PE as data without resolving imports or executing DllMain. Loading an
+          # SKSE DLL normally during CI would make CommonLib inspect pwsh.exe as Skyrim.
+          $handle = [NativeMethods]::LoadLibraryEx(
+            (Resolve-Path -LiteralPath $dll).Path,
+            [IntPtr]::Zero,
+            0x00000001) # DONT_RESOLVE_DLL_REFERENCES
+          if ($handle -eq [IntPtr]::Zero) {
+            throw "Could not map DLL for metadata inspection: Win32 $([Runtime.InteropServices.Marshal]::GetLastWin32Error())"
+          }
+          try {
+            $metadata = [NativeMethods]::GetProcAddress($handle, 'SKSEPlugin_Version')
+            if ($metadata -eq [IntPtr]::Zero) {
+              throw 'Could not locate SKSEPlugin_Version in the mapped DLL.'
+            }
+            $readUInt32 = {
+              param([int] $offset)
+              [uint32] [Runtime.InteropServices.Marshal]::ReadInt32($metadata, $offset)
+            }
+
+            if ((& $readUInt32 0x000) -ne 1) {
+              throw 'Unexpected SKSE plugin declaration version.'
+            }
+            if ((& $readUInt32 0x304) -ne 2) {
+              throw 'The DLL does not advertise Address Library format-5 support.'
+            }
+            if ((& $readUInt32 0x308) -ne 0 -or
+                (& $readUInt32 0x30C) -ne 0x01070680 -or
+                (& $readUInt32 0x310) -ne 0) {
+              throw 'The DLL metadata is not restricted to Skyrim 1.7.104.0.'
+            }
+          } finally {
+            [void] [NativeMethods]::FreeLibrary($handle)
+          }
+
+          $pluginDirectory = 'out\SKSE\Plugins'
+          New-Item -ItemType Directory -Path $pluginDirectory -Force | Out-Null
+          Copy-Item -LiteralPath $dll -Destination $pluginDirectory -Force
+          if (Test-Path -LiteralPath $pdb -PathType Leaf) {
+            Copy-Item -LiteralPath $pdb -Destination $pluginDirectory -Force
+          }
+          Copy-Item -LiteralPath 'ENSRICK-PORT.md', 'LICENSE' -Destination out -Force
+
+          $hash = (Get-FileHash -LiteralPath "$pluginDirectory\CurrencySwapper.dll" -Algorithm SHA256).Hash.ToLowerInvariant()
+          "$hash *SKSE/Plugins/CurrencySwapper.dll" | Set-Content -LiteralPath 'out\SHA256SUMS.txt' -Encoding ascii
+
+      - name: Upload DLL overlay
+        uses: actions/upload-artifact@v4
+        with:
+          name: CurrencySwapper-2.2.0-Skyrim-1.7.104-overlay
+          path: out
+          if-no-files-found: error

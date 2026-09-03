@@ -1,3 +1,10 @@
+# Currency Swapper
+
+The `port/1.7.104-no-modal` branch is a maintenance port of the released
+Currency Swapper 2.2.0 source for Skyrim SE/AE 1.7.104.0 and Address Library
+format 5. See [ENSRICK-PORT.md](ENSRICK-PORT.md) for its exact compatibility
+boundary, changes, verification, artifact use, and licensing notes.
+
 ## Building
 ### Requirements:
 * CMake
@@ -7,8 +14,8 @@
 ---
 ### Instructions:
 ```
-git clone https://github.com/SeaSparrowOG/SKSE-Plugin-Template
-cd SKSE-Plugin-Template
+git clone --branch port/1.7.104-no-modal https://github.com/Ensrick/CurrencySwapper.git
+cd CurrencySwapper
 git submodule update --init --recursive
 cmake --preset vs2022-windows-vcpkg-release
 cmake --build --preset Release

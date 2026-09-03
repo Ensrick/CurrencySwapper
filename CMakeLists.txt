@@ -12,6 +12,15 @@ project(
 	LANGUAGES CXX
 )
 
+# Keep fatal diagnostics in the plugin log instead of opening a modal Windows
+# message box. This must be defined before CommonLibSSE is added so the plugin
+# and the static library use the same inline failure implementation.
+add_compile_definitions(COMMONLIBSSE_NO_MODAL_ERRORS)
+set(BUILD_TESTS OFF CACHE BOOL "Do not build CommonLibSSE tests as part of the plugin" FORCE)
+set(ENABLE_SKYRIM_SE OFF CACHE BOOL "Build only for the audited AE runtime" FORCE)
+set(ENABLE_SKYRIM_AE ON CACHE BOOL "Build for the audited AE runtime" FORCE)
+set(ENABLE_SKYRIM_VR OFF CACHE BOOL "Currency Swapper does not support Skyrim VR" FORCE)
+
 set_property(GLOBAL PROPERTY USE_FOLDERS ON)
 
 get_filename_component(
