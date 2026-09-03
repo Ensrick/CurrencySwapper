@@ -83,9 +83,38 @@ jobs:
             }
           }
 
-          $handle = [Runtime.InteropServices.NativeLibrary]::Load((Resolve-Path -LiteralPath $dll).Path)
+          Add-Type -TypeDefinition @'
+          using System;
+          using System.Runtime.InteropServices;
+
+          public static class NativeMethods
+          {
+              [DllImport("kernel32.dll", CharSet = CharSet.Unicode, SetLastError = true)]
+              public static extern IntPtr LoadLibraryEx(string fileName, IntPtr file, uint flags);
+
+              [DllImport("kernel32.dll", CharSet = CharSet.Ansi, ExactSpelling = true, SetLastError = true)]
+              public static extern IntPtr GetProcAddress(IntPtr module, string procName);
+
+              [DllImport("kernel32.dll", SetLastError = true)]
+              [return: MarshalAs(UnmanagedType.Bool)]
+              public static extern bool FreeLibrary(IntPtr module);
+          }
+          '@
+
+          # Map the PE as data without resolving imports or executing DllMain. Loading an
+          # SKSE DLL normally during CI would make CommonLib inspect pwsh.exe as Skyrim.
+          $handle = [NativeMethods]::LoadLibraryEx(
+            (Resolve-Path -LiteralPath $dll).Path,
+            [IntPtr]::Zero,
+            0x00000001) # DONT_RESOLVE_DLL_REFERENCES
+          if ($handle -eq [IntPtr]::Zero) {
+            throw "Could not map DLL for metadata inspection: Win32 $([Runtime.InteropServices.Marshal]::GetLastWin32Error())"
+          }
           try {
-            $metadata = [Runtime.InteropServices.NativeLibrary]::GetExport($handle, 'SKSEPlugin_Version')
+            $metadata = [NativeMethods]::GetProcAddress($handle, 'SKSEPlugin_Version')
+            if ($metadata -eq [IntPtr]::Zero) {
+              throw 'Could not locate SKSEPlugin_Version in the mapped DLL.'
+            }
             $readUInt32 = {
               param([int] $offset)
               [uint32] [Runtime.InteropServices.Marshal]::ReadInt32($metadata, $offset)
@@ -103,7 +132,7 @@ jobs:
               throw 'The DLL metadata is not restricted to Skyrim 1.7.104.0.'
             }
           } finally {
-            [Runtime.InteropServices.NativeLibrary]::Free($handle)
+            [void] [NativeMethods]::FreeLibrary($handle)
           }
 
           $pluginDirectory = 'out\SKSE\Plugins'
